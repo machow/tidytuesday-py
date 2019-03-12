@@ -1,0 +1,288 @@
+---
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd//Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 1.0.2
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+# TV's golden age is real
+
+* [tidytuesday data description](https://github.com/rfordatascience/tidytuesday/tree/master/data/2019/2019-01-08)
+* [Dave Robinson's analysis](https://github.com/dgrtwo/data-screencasts/blob/master/golden-age-tv.Rmd)
+
+```{python}
+import pandas as pd
+
+from siuba.tidy import *
+from siuba.siu import _
+
+from plotnine import *
+```
+
+```{python}
+
+tv_ratings = pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-08/IMDb_Economist_tv_ratings.csv")
+
+tv_ratings["date"] = pd.to_datetime(tv_ratings.date)
+```
+
+```{python}
+tv_ratings >> filter(_, _.title.str.contains("Buffy"))
+```
+
+## Do most shows get better or worse over time?
+
+```{python}
+(tv_ratings
+  >> count(_, _.seasonNumber)
+  >> ggplot(aes("seasonNumber", "n"))
+   + geom_line()
+  )
+```
+
+```{python}
+(tv_ratings
+  >> filter(_, _.seasonNumber <= 7)
+  >> group_by(_, _.seasonNumber)
+  >> summarize(_, av_rating = _.av_rating.mean())
+  >> ggplot(aes("seasonNumber", "av_rating"))
+   + geom_line()
+  )
+```
+
+```{python}
+# Note: if filter used transform under the hood (for single var exprs)
+#       it would go a bit faster. In general, grouping + subsetting
+#       appears fairly slow in pandas compared to dplyr
+tv_ratings_full_show = (tv_ratings
+  >> group_by(_, "title")
+  >> filter(_,
+       (_.seasonNumber == 1).any(),
+       (_.seasonNumber == row_number(_) + 1).all()
+     )
+  )
+
+# (tv_ratings_full_show
+#   >> filter(_, n(_) >= 5, _.seasonNumber <= 5)
+#   >> ungroup(_)
+#   >> ggplot(aes("seasonNumber", "av_rating", group = "seasonNumber")) + geom_boxplot()
+#   )
+```
+
+## What are the highest rated seasons of TV?
+
+```{python}
+by_show = (tv_ratings
+  >> group_by(_, "title")
+  >> summarize(_,
+       avg_rating = _.av_rating.mean(),
+       sd = _.av_rating.std(),
+       seasons = n(_)
+     )
+  >> arrange(_, -_.avg_rating)
+  )
+
+most_variable_shows = by_show \
+  >> filter(_, _.seasons >= 5) \
+  >> arrange(_, -_.sd) \
+  >> head(_, 6)
+
+(tv_ratings
+  >> inner_join(_, most_variable_shows, "title")
+  >> ggplot(aes("seasonNumber", "av_rating", color = "title"))
+   + geom_line()
+   + geom_point()
+   + scale_x_continuous(breaks = range(11))
+   + facet_wrap("~ title")
+   + theme(legend_position = "none")
+  )
+```
+
+## Has TV been getting better or worse over time?
+
+```{python}
+(tv_ratings
+  >> mutate(_, year = _.date.dt.year)
+  >> ggplot(aes("av_rating"))
+   + geom_histogram()
+   + facet_wrap("~year")
+  )
+
+by_year = (tv_ratings
+  >> group_by(_, year = 2 * (_.date.dt.year // 2))
+  >> summarize(_,
+       mean_rating = _.av_rating.mean(),
+       med_rating = _.av_rating.median(),
+       mean_season_1 = _.av_rating[_.seasonNumber == 1].mean(),
+       avg_season = _.seasonNumber.mean(),
+       observations = n(_)
+       )
+  )
+
+(by_year
+  >> gather(_, "metric", "value", -_.year, -_.observations, -_.avg_season, -_.sd)
+  >> ggplot(aes("year", "value", color = "metric"))
+   + geom_line()
+   + geom_point()
+  )
+```
+
+```{python}
+(tv_ratings
+  >> group_by(_,
+       year = 5 * (_.date.dt.year // 5),
+       seasonNumber = if_else(_.seasonNumber >= 4, "4+", _.seasonNumber)
+       )
+  >> summarize(_, mean_rating = _.av_rating.mean(), observations = _.shape[0])
+  >> ggplot(aes("year", "mean_rating", color = "seasonNumber"))
+   + geom_line()
+   + labs(color = "Season", y = "Average rating in each 5 year period")
+  )
+```
+
+```{python}
+(tv_ratings
+  >> ggplot(aes("date", "av_rating"))
+   + geom_point()
+   + geom_smooth(method = "loess", fill = "grey", color = "blue")
+  )
+```
+
+```{python}
+(tv_ratings
+  >> mutate(_, year = 2 * (_.date.dt.year // 2))
+  >> ggplot(aes("year", "av_rating", group = "year"))
+   + geom_boxplot()
+  )
+```
+
+```{python}
+(tv_ratings
+  >> filter(_, _.seasonNumber == 1)
+  >> mutate(_, year = 2* (_.date.dt.year // 2))
+  >> ggplot(aes("year", "av_rating", group = "year"))
+   + geom_boxplot()
+  )
+```
+
+## Show survival
+
+If season 1 is good, what's the probability they get a season 2?
+
+```{python}
+first_3_seasons = (tv_ratings
+  >> filter(_, _.seasonNumber <= 3)
+  >> group_by(_, "title")
+  >> mutate(_, date_first_season = _.date.min())
+  >> ungroup(_)
+  >> transmute(_,
+       _.titleId, _.title, _.date_first_season, _.av_rating,
+       seasonNumber = "season" + _.seasonNumber.astype("str")
+       )
+  >> distinct(_, "title", "seasonNumber", _keep_all = True)
+  >> spread(_, "seasonNumber", "av_rating")
+  >> filter(_, ~_.season1.isna())
+  >> filter(_, _.date_first_season <= "2017-01-01")
+  )
+
+
+```
+
+```{python}
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+
+fit = smf.glm("np.invert(season2.isna()) ~ season1",
+              data = first_3_seasons, family = sm.families.Binomial()).fit()
+fit.summary()
+
+```
+
+```{python}
+# Ah! Can't fit logistic w/ plotnine yet :/
+# see: https://github.com/has2k1/plotnine/issues/265
+first_3_seasons \
+  >> mutate(_, has_s2 = ~_.season2.isna()) \
+  >> ggplot(aes("season1", "has_s2.astype('int')")) \
+  + geom_point(position = position_jitter(width = 0, height = .2), alpha = .4) \
+  + geom_smooth(method = 'glm', method_args = {'family': sm.families.Binomial()})
+```
+
+```{python}
+from siuba.meta_hook import pandas as pd_
+from mizani.formatters import percent_format
+
+(first_3_seasons
+  >> group_by(_, season1_bin = pd_.cut(_.season1, [0, 7, 7.5, 8, 8.5, 10]),
+                 time_bin = if_else(_.date_first_season < "2000-01-01", "Before 2000", "After 2000"))
+  >> summarize(_, had_second_season = (~_.season2.isna()).mean(),
+               observations = n(_))
+  >> ggplot(aes("season1_bin", "had_second_season", color = "time_bin", group = "time_bin"))
+   + geom_line()
+   + geom_point(aes(size = "observations"))
+   + scale_y_continuous(labels = percent_format())
+  )
+```
+
+```{python}
+# TODO: full analysis with splines
+```
+
+# Misc
+
+```{python}
+def lists_to_df(l, colname):
+    return [pd.DataFrame({colname: x}) for x in l]
+
+genre_ratings = (tv_ratings
+  >> mutate(_, data = lambda d: lists_to_df(d.genres.str.split(","), "genre"))
+  >> unnest(_, "data")
+  )
+
+```
+
+## How common are different genres?
+
+```{python}
+genre_summary = (genre_ratings
+  >> group_by(_, "genre", year = _.date.dt.year)
+  >> summarize(_, avg_rating = _.av_rating.mean(), n = _.shape[0])
+  )
+```
+
+```{python}
+common_genres = (genre_summary
+  >> group_by(_, "year")
+  >> filter(_, _.n.rank(ascending = False) < 5)
+  >> ungroup(_)
+  >> count(_, "genre", sort = True)
+  >> pipe(_.loc[:,"genre"])
+  )
+common_genres
+```
+
+## What are the animated genres?
+
+```{python}
+genre_ratings >> filter(_, _.genre == "Animation") >> distinct(_, "title")
+```
+
+```{python}
+genre_summary \
+  >> ggplot(aes("year", "avg_rating", color = "genre")) + geom_line()
+```
+
+```{python}
+(tv_ratings
+  >> count(_, year = _.date.dt.year)
+  >> ggplot(aes("year", "n")) + geom_line()
+  )
+```

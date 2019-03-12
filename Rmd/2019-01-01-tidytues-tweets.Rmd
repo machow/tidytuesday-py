@@ -1,0 +1,245 @@
+---
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd//Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.0'
+      jupytext_version: 1.0.2
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+## Tidytuesday Tweets
+
+* [Dave Robinson's analysis](https://github.com/dgrtwo/data-screencasts/blob/master/tidytuesday-tweets.Rmd)
+
+Takeaways:
+
+* qgrid does not like when a dataframe has columns containing lists
+* need efficient categorical reordering...
+* `%whos DataFrame` is very handy!
+
+```{python}
+from siuba.tidy import *
+from siuba.siu import _
+
+from plotnine import *
+import plotnine as p
+
+import pandas as pd
+
+import rpy2.ipython
+# %load_ext rpy2.ipython
+
+import rpy2.robjects as robjects
+
+import qgrid
+qgrid.set_defaults(grid_options = {"forceFitColumns": False})
+```
+
+## Load in Data
+
+I'm using rpy2 3.0, but its conversion to a pandas DataFrame doesn't seem to work, if
+it is a list column with a NULL entry.
+
+See [rtweet](https://rtweet.info/) for explanation of data.
+
+* row - a tweet
+* col - various measures
+
+```{r magic_args='-o tt_tweets'}
+library(readr)
+
+tt_tweets <- read_rds(url("https://github.com/rfordatascience/tidytuesday/blob/master/data/2019/2019-01-01/tidytuesday_tweets.rds?raw=true"))
+
+tt_tweets <- as.list(tt_tweets)
+```
+
+```{python}
+out = {}
+for k, col in tt_tweets.items():
+    out[k] = robjects.pandas2ri.rpy2py_listvector(col)
+
+df = pd.DataFrame(out)
+
+# to_datetime wants nanoseconds by default, but gets to the second...
+df["created_at"] = pd.to_datetime(df.created_at, unit = "s")
+```
+
+## Quick glimpse of raw data
+
+```{python}
+df[["user_id", "created_at", "hashtags", "favorite_count", "retweet_count"]].head()
+```
+
+```{python}
+ggplot(df, aes("created_at", "favorite_count")) \
+  + geom_point() \
+  + theme(axis_text_x = element_text(angle=45, ha = "right"))
+```
+
+## Weekly likes and retweets
+
+```{python}
+# number of tweets per week
+# week floor: https://medium.com/jbennetcodes/dealing-with-datetimes-like-a-pro-in-pandas-b80d3d808a7f
+# plotnine them options: https://plotnine.readthedocs.io/en/stable/api.html#themeables
+
+# this allows these functions to be used in siu expressions
+from siuba.meta_hook.numpy import log, exp
+
+week_summary = (df
+  >> mutate(_, week = _.created_at.dt.to_period("W").dt.start_time)
+  >> group_by(_, "week")
+  >> summarize(_,
+       n_tweets = _.shape[0],
+       # geometric means of vals + 1
+       avg_retweets = exp(log(_.retweet_count + 1).mean()),
+       avg_favorite = exp(log(_.favorite_count + 1).mean())
+     )
+  )
+
+(week_summary
+  >> pipe(_.melt(id_vars = "week"))
+  >> ggplot(aes("week", "value"))
+   + geom_line()
+   + theme(axis_text_x = element_text(angle=45, ha = "right"))
+   + facet_wrap("~ variable")
+   + labs(title = "#Tidytuesday tweets by week", y = "Number tweets", x = "Week")
+  )
+
+```
+
+## Who is tweeting most?
+
+```{python}
+from siuba.meta_hook.pandas import Categorical
+
+(df
+  >> count(_, "screen_name", sort = True)
+  >> head(_, 12)
+  # compare with reorder(screen_name, n)
+  >> mutate(_, screen_name = Categorical(_.screen_name, _.screen_name.iloc[::-1], ordered = True))
+  >> ggplot(aes("screen_name", "n"))
+   + geom_col()
+   + coord_flip()
+  )
+```
+
+## Who is getting most retweets?
+
+```{python}
+df \
+  >> group_by(_, "screen_name") \
+  >> summarize(_, tweets = _.shape[0], retweets = _.retweet_count.sum()) \
+  >> arrange(_, -_.tweets, -_.retweets) \
+  >> head(_, 10)
+```
+
+```{python}
+df \
+  >> select(_, "screen_name", "text", "retweet_count", "favorite_count") \
+  >> mutate(_, ratio = (_.favorite_count + 1) / (_.retweet_count + 1)) \
+  >> arrange(_, -_.ratio) \
+  >> head(_, 10)
+```
+
+## tidytext analyses
+
+```{python}
+from nltk.tokenize import TweetTokenizer
+
+# make and test tokenizer
+tknzr = TweetTokenizer()
+s0 = df.loc[0, 'text']
+tknzr.tokenize(s0)
+
+def tokenize(s):
+    return pd.DataFrame({'word': tknzr.tokenize(s)})
+
+all_tweet_words = df \
+  >> mutate(_, data = _.text.apply(tokenize)) \
+  >> unnest(_, "data")
+
+# count number of times the word "in" appears. Need to use stopwords!
+all_tweet_words.word.value_counts()['in']
+```
+
+```{python}
+# stopwords: see https://stackoverflow.com/a/19133088/1144523
+from nltk.corpus import stopwords
+
+stop_en = set(stopwords.words('english'))
+stop_en.update(["#TidyTuesday", "#tidytuesday", "de", "I"])
+
+tweet_words = all_tweet_words \
+  >> filter(_, ~_.word.isin(stop_en), _.word.str.contains("[a-zA-Z]")) \
+  >> mutate(_, week = _.created_at.dt.to_period("W").dt.start_time)
+
+(tweet_words
+  >> count(_, _.word, sort = True)
+  >> head(_, 16)
+  >> mutate(_, word = Categorical(_.word, _.word.iloc[::-1], ordered = True))
+  >> ggplot(aes("word", "n"))
+   + geom_col()
+   + coord_flip()
+   + labs(title = "Most common words in #tidytuesday tweets", y = "frequency")
+  )
+```
+
+```{python}
+(df
+  >> ggplot(aes("favorite_count + 1"))
+   + geom_histogram(bins = 30)
+   + scale_x_log10()
+  )
+```
+
+## What topic is each week about?
+
+```{python}
+# use tf_idf on weekly words
+from sklearn.feature_extraction.text import TfidfTransformer
+
+tf_idf = TfidfTransformer()
+
+# convert to week x word frequency counts
+# note: not a sparse matrix, use sklearn's CountVectorizer for that
+week_word_freq = tweet_words \
+  >> count(_, "week", "word") \
+  >> spread(_, "word", "n", fill = 0, reset_index = False)
+
+# get week x word tf-idf measures
+tf_idf.fit(week_word_freq)
+word_tf_idf = tf_idf.transform(week_word_freq).toarray()
+
+# do some serious munging to go back to long format
+tmp = pd.DataFrame(word_tf_idf, index = week_word_freq.index, columns=week_word_freq.columns)
+tmp[tmp == 0] = pd.np.nan
+long_tf_idf = tmp.stack().reset_index() >> rename(_, word = "level_1", tf_idf = 0)
+
+top_word = (tweet_words
+  >> inner_join(_, long_tf_idf, ["week", "word"])
+  >> arrange(_, -_.tf_idf)
+  >> distinct(_, "week", _keep_all = True)
+  >> select(_, _.week, _.tf_idf, _.startswith(""))
+  )
+
+
+```
+
+```{python}
+top_word \
+  >> inner_join(_, week_summary, ["week"]) \
+  >> arrange(_, -_.avg_retweets)
+```
+
+## Scrape titles from github
+
+```{python}
+# TODO
+```

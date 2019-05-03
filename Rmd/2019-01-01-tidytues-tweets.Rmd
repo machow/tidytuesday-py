@@ -24,8 +24,7 @@ Takeaways:
 * `%whos DataFrame` is very handy!
 
 ```{python}
-from siuba.tidy import *
-from siuba.siu import _
+from siuba import *
 
 from plotnine import *
 import plotnine as p
@@ -114,6 +113,10 @@ week_summary = (df
 
 ```
 
+```{python}
+week_summary
+```
+
 ## Who is tweeting most?
 
 ```{python}
@@ -133,11 +136,12 @@ from siuba.meta_hook.pandas import Categorical
 ## Who is getting most retweets?
 
 ```{python}
-df \
-  >> group_by(_, "screen_name") \
-  >> summarize(_, tweets = _.shape[0], retweets = _.retweet_count.sum()) \
-  >> arrange(_, -_.tweets, -_.retweets) \
+(df
+  >> group_by(_, "screen_name") 
+  >> summarize(_, tweets = _.shape[0], retweets = _.retweet_count.sum())
+  >> arrange(_, -_.tweets, -_.retweets)
   >> head(_, 10)
+  )
 ```
 
 ```{python}

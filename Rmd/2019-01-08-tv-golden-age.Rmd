@@ -21,8 +21,8 @@ jupyter:
 ```{python}
 import pandas as pd
 
-from siuba.tidy import *
-from siuba.siu import _
+from siuba import *
+from siuba.dply.vector import row_number, n
 
 from plotnine import *
 ```
@@ -199,6 +199,7 @@ first_3_seasons = (tv_ratings
 ```{python}
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+import numpy as np
 
 fit = smf.glm("np.invert(season2.isna()) ~ season1",
               data = first_3_seasons, family = sm.families.Binomial()).fit()

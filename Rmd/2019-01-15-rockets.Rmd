@@ -21,11 +21,12 @@ jupyter:
 
 ```{python}
 import pandas as pd
+import numpy as np
 import requests
 
 from plotnine import *
-from siuba.siu import _
-from siuba.tidy import *
+from siuba import *
+from siuba.dply.vector import n
 from siuba.dply.forcats import fct_collapse, fct_lump, fct_reorder
 
 from qgrid import show_grid
@@ -47,7 +48,7 @@ launches["launch_date_dt"] = pd.to_datetime(launches.launch_date, errors = 'coer
 
 ```{python}
 (launches
-  >> count(_, _.launch_year, _.agency_type)
+  >> count(_.launch_year, _.agency_type)
   >> ggplot(aes("launch_year", "n", color = "agency_type"))
    + geom_line()
    + labs(x = "Time", y = "# of launches this year", color = "Agency type")
@@ -60,25 +61,25 @@ datetime.now()
 ```
 
 ```{python}
-launches >> count(_, _.agency_type, _.agency, sort = True)
+launches >> count(_.agency_type, _.agency, sort = True)
 
-agencies >> count(_, _.state_code, wt = _.count, sort = True)
+agencies >> count(_.state_code, wt = _.count, sort = True)
 
 launches_processed = (launches
-  >> filter(_, _.launch_date_dt <= datetime.now())
-  >> mutate(_, state_code = fct_collapse(
+  >> filter(_.launch_date_dt <= datetime.now())
+  >> mutate(state_code = fct_collapse(
        _.state_code,
        {"RU": ["SU", "RU"], "FR": "F", "JP": "J", "IT": "I"}
      ))
-   >> mutate(_, state_name = fct_lump(_.state_code, 6).fillna('Other'))
+   >> mutate(state_name = fct_lump(_.state_code, 6).fillna('Other'))
   )
 
 ```
 
 ```{python}
 (launches_processed
-  >> count(_, "launch_year", "state_name")
-  >> mutate(_, state_name = fct_reorder(_.state_name, -_.n, np.sum))
+  >> count("launch_year", "state_name")
+  >> mutate(state_name = fct_reorder(_.state_name, -_.n, np.sum))
   >> ggplot(aes("launch_year", "n", color = "state_name"))
    + geom_line()
    + labs(x = "Time", y = "Launches per Year", color = "Responsible state",
@@ -89,6 +90,118 @@ launches_processed = (launches
 
 ## Focus on private + startup launches
 
+```{python}
+agencies >> filter(_, _.agency_type.isin(["private", "startup"]))
+
+# Note: fct_lump currently doesn't keep all tied levels
+private_startup_launches = (launches_processed
+  >> filter(_, _.agency_type.isin(['private', 'startup']))
+  >> inner_join(_,
+       agencies >> select(_, "agency", _.agency_name == "name", "short_name", "parent"),
+       "agency"
+       )
+  # note unlike R, mutate can't take same named arg twice in python
+  >> mutate(_, agency_name_lumped = fct_lump(_.agency_name, 6))
+  >> mutate(_,
+      agency_name_lumped = if_else(
+         (_.agency_name_lumped == "Other") & (_.state_name == "US"),
+         "Other US",
+         _.agency_name_lumped
+         )
+       )
+  )
+
+private_startup_launches.head()
+```
+
+```{python}
+(private_startup_launches
+  >> count(_, _.agency_name_lumped, _.state_name, sort = True)
+  >> mutate(_, agency_name_lumped = fct_reorder(_.agency_name_lumped, _.n, np.sum))
+  >> ggplot(aes("agency_name_lumped", "n", fill = "state_name"))
+   + geom_col()
+   + coord_flip()
+   + labs(x = "", y = "# of launches overall",
+          title = "What private/startup agencies have had the most launches?",
+          fill = "Country"
+         )
+  )
+```
+
+```{python}
+(private_startup_launches
+  >> count(
+       _.agency_name_lumped,
+       decade = 5 * (_.launch_year // 5)
+     )
+  >> complete(_.agency_name_lumped, _.decade, fill = {'n': 0})
+  >> mutate(agency_name_lumped = fct_reorder(_.agency_name_lumped, -_.n, np.sum))
+  >> ggplot(aes("decade", "n", color = "agency_name_lumped"))
+   + geom_line()
+   + facet_wrap("~ agency_name_lumped")
+   + theme(legend_position = "none")
+   + labs(x = "Time",
+          y = "# of launches in 5 year period")
+  )
+```
+
+```{python}
+# TODO: semi_join
+vehicles = (launches_processed
+  >> group_by(_.type, _.state_name)
+  >> summarize(
+       first_launch = _.launch_year.min(),
+       last_launch = _.launch_year.max(),
+       launches = n(_)
+     )
+  >> ungroup()
+  )
+
+russian_vehicles = (vehicles
+  >> filter(_.state_name == "RU")
+  >> arrange(-_.launches)
+  >> filter(_.launches >= 30)
+  )
+
+
+# Note: use lambda in mutate since it's about as convenient
+# as a symbolic expression
+(launches_processed
+  >> semi_join(_, russian_vehicles, on = "type")
+  >> mutate(
+       type = fct_reorder(_.type, _.launch_date, np.min),
+       launch_date = lambda _: pd.to_datetime(_.launch_date)
+     )
+  >> ggplot(aes("launch_date", "type", color = "agency_type"))
+   + geom_jitter(color = "blue", alpha = .25, width = 0, height = .2)
+   + scale_y_discrete() 
+   + theme(legend_position = "none")
+   + labs(title = "Timeline of Sovit/Russian space vehicles",
+          x = "Launch date",
+          y = "Vehile type",
+          subtitle = "Only vehicles with at least 30 launches"
+         )
+  )
+```
+
+```{python}
+(launches_processed
+  >> filter(_.state_code == "US")
+  >> add_count(_.type)
+  >> filter(_.n >= 20)
+  >> mutate(
+    type = fct_reorder(_.type, _.launch_date, np.min),
+    agency_type = _.agency_type.str.capitalize(),
+    launch_date = lambda _: pd.to_datetime(_.launch_date)
+    )
+  >> ggplot(aes("launch_date", "type", color = "agency_type"))
+   + geom_jitter(alpha = .25, width = 0, height = .2)
+   + labs(title = "Timeline of US space vehicles",
+          x = "Launch date", y = "Vehicle type", coor = "Agency type",
+          subtitle = "Only vehicles with at least 20 launches"
+          )
+  )
+```
 
 # Misc
 
@@ -96,8 +209,8 @@ launches_processed = (launches
 #pd.to_datetime(launches.launch_date)
 #launches >> filter("launch_date")
 (launches
-  >> count(_, "state_code", sort = True)
-  >> mutate(_,
+  >> count("state_code", sort = True)
+  >> mutate(
        state_label = if_else(_.n > 100, _.state_code, 'other')      
        )
   >> right_join(_, launches, on = "state_code")

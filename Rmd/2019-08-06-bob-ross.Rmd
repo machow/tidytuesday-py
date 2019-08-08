@@ -1,0 +1,159 @@
+---
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd//Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.1'
+      jupytext_version: 1.2.1
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+## What is siuba?
+
+```{python}
+from siuba import _, group_by, summarize, filter
+from siuba.data import mtcars
+
+(mtcars
+  >> group_by(_.cyl)
+  >> summarize(avg_hp = _.hp.mean())
+  )
+```
+
+```{python}
+mtcars.agg({'hp': lambda _: _.mean()})
+```
+
+```{python}
+mtcars.groupby(['cyl']).agg({'hp': lambda _: _.mean()})
+```
+
+## Bob Ross Analysis
+
+```{python}
+import pandas as pd
+from siuba import *
+from plotnine import *
+
+# %load_ext blackcellmagic
+
+import matplotlib.cbook
+
+import warnings
+import plotnine
+warnings.filterwarnings(module='plotnine*', action='ignore')
+warnings.filterwarnings(module='matplotlib*', action='ignore')
+
+# %matplotlib inline
+
+bob_ross = pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-08-06/bob-ross.csv")
+```
+
+```{python}
+tidy_bob = bob_ross >> gather("tag", "value", _["APPLE_FRAME":]) >> filter(_.value == 1)
+
+tidy_bob.columns = tidy_bob.columns.str.lower()
+```
+
+```{python}
+bob_ross.shape
+```
+
+```{python}
+tidy_bob >> count(_.episode, _.title, sort = True) >> head(3)
+```
+
+```{python}
+tidy_bob >> count(_.tag, sort = True) >> head(5)
+```
+
+```{python}
+tidy_bob >> count(_.value)
+```
+
+### Episodes can have the same titles
+
+```{python}
+bob_ross >> filter(_.TITLE == '"LAKESIDE CABIN"')
+```
+
+### Most common tags
+
+```{python}
+from siuba.dply.forcats import fct_reorder
+
+(tidy_bob
+    >> count(_.tag, sort=True)
+    >> mutate(tag=fct_reorder(_.tag, _.n))
+    >> filter(_.n > 39)
+    >> ggplot(aes("tag", "n"))
+    + geom_col()
+    + coord_flip()
+    + labs(title="Frequency of Tags in Bob Ross Paintings", x="Tag", y="Number of Tags")
+    )
+```
+
+### Cond probability of trees (do trees have friends?)
+
+p(trees | tree) = p(tree AND trees) / p(tree)
+
+```{python}
+tidy_bob >> count(_.tag) >> filter(_.tag.isin(["TREE", "TREES"]))
+```
+
+```{python}
+print(round(337 / 361, 2))
+
+bob_ross >> filter(_.TREE == 1, _.TREES == 1) >> count()
+```
+
+### Most common word in painting titles
+
+```{python}
+title_word_count = (
+    bob_ross
+    >> select(_.EPISODE, _.TITLE)
+    >> mutate(word=_.TITLE.str.split(" "))
+    >> unnest("word")
+    >> mutate(word=_.word.str.replace('"', ""))
+    >> filter(~_.word.isin(["THE", "OF", "IN", "AT", "A"]))
+    >> count(_.word, sort=True)
+)
+
+(
+    title_word_count
+    >> head(15)
+    >> mutate(word=fct_reorder(_.word, _.n))
+    >> ggplot(aes("word", "n"))
+    + geom_col()
+    + coord_flip()
+    + labs(title="Most Common Words in Painting Titles", x="Word", y="Number of Words")
+)
+```
+
+### Tags grouped by season
+
+```{python}
+from siuba.dply.vector import row_number
+
+grouped_bob = tidy_bob >> mutate(
+    season_num=_.episode.str.extract("S([0-9]+)E([0-9]+)").loc[:, 0].astype(int),
+    episode_num=_.episode.str.extract("S([0-9]+)E([0-9]+)").loc[:, 1].astype(int),
+)
+
+(
+    grouped_bob
+    >> count(_.season_num, _.tag)
+    >> arrange(_.season_num, -_.n)
+    >> group_by(_.season_num)
+    >> mutate(rank = _.n.rank(method = "dense", ascending = False).astype(int))
+    >> filter(_["rank"] < 4)
+    >> ungroup()
+    >> count(_.tag, sort = True)
+)
+```

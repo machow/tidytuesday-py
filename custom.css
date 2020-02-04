@@ -1,0 +1,5 @@
+.nav-tabs > li > a.tabs__link--active {
+  background-color: #eee;
+  border: 1px solid #ddd;
+  border-bottom: none;
+}

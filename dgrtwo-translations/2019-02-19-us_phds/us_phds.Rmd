@@ -1,0 +1,180 @@
+---
+title: "US PhDs"
+output: html_document
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.3.2
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python pytabs={'class': 'pytabs-1', 'name': 'R'}}
+import rpy2
+
+# %load_ext rpy2.ipython
+
+from qgrid import show_grid
+
+```
+
+## Preprocessing
+
+```{r pytabs={'class': 'pytabs-2', 'name': 'R'}}
+
+library(tidyverse)
+theme_set(theme_light())
+
+# Major field of study
+major_fields_raw <- readxl::read_xlsx("./data/sed17-sr-tab012.xlsx",
+                  skip = 3)
+```
+
+```{r pytabs={'class': 'pytabs-3', 'name': 'R'}}
+
+major_fields <- major_fields_raw %>%
+  rename(field = `Field of study`) %>%
+  gather(key, value, -field) %>%
+  mutate(year = as.numeric(ifelse(str_detect(key, "X__"), NA, key)),
+         type = ifelse(!str_detect(value, "Number|Percent"), NA, value),
+         value = as.numeric(value)) %>%
+  fill(year, type) %>%
+  select(-key) %>%
+  filter(!is.na(value)) %>%
+  spread(type, value)
+
+# major_fields_raw
+```
+
+## Plotting degrees over time for 6 degrees
+
+```{r pytabs={'class': 'pytabs-4', 'name': 'R'}}
+
+fine_fields <- readxl::read_xlsx("./data/sed17-sr-tab013.xlsx",
+                  skip = 3) %>%
+  rename(field = 1) %>%
+  gather(year, number, -field) %>%
+  mutate(year = as.numeric(year),
+         number = as.numeric(number)) %>%
+  filter(!is.na(number))
+```
+
+```{r pytabs={'class': 'pytabs-5', 'name': 'R'}}
+
+set.seed(42)
+field_subset = sample(unique(fine_fields$field), 6)
+
+fine_fields %>%
+  filter(field %in% field_subset) %>%
+  ggplot(aes(year, number, color = field)) +
+  geom_line()
+```
+
+```{r pytabs={'class': 'pytabs-6', 'name': 'R'}}
+
+# get the broad field names and the major field names
+
+sex <- c("All", "Male", "Female", "All doctorate recipientsa", "All fieldsa")
+
+broad_fields <- readxl::read_xlsx("./data/sed17-sr-tab014.xlsx", skip = 4) %>%
+  rename(field = 1) %>%
+  filter(!field %in% sex) %>%
+  mutate(field = fct_recode(field,
+                            "Life sciences" = "Life sciencesb",
+                            "Other" = "Otherc")) %>%
+  pull(field) %>%
+  as.character()
+```
+
+
+```{r pytabs={'class': 'pytabs-7', 'name': 'R'}}
+
+recipients_year_field_sex <- readxl::read_xlsx("./data/sed17-sr-tab015.xlsx", skip = 3) %>%
+  rename(field = 1) %>%
+  select(-contains("change")) %>%
+  mutate(field = as.character(fct_recode(field, "All" = "All doctorate recipientsa",
+                                         "Other" = "Otherb")),
+         sex = if_else(field %in% sex, field, NA_character_),
+         broad_field = ifelse(field %in% broad_fields, field, NA)) %>%
+  fill(sex, broad_field) %>%
+  gather(year, number, -sex, -broad_field, -field) %>%
+  mutate(year = as.numeric(year),
+         number = as.numeric(number)) %>%
+  filter(!field %in% sex) %>%
+  filter(!is.na(number))
+```
+
+```{r pytabs={'class': 'pytabs-8', 'name': 'R'}}
+
+recipients_year_field_sex %>%
+  filter(sex != "All",
+         broad_field == "Mathematics and computer sciences") %>%
+  ggplot(aes(year, number, color = sex)) +
+  geom_line() +
+  expand_limits(y = 0) +
+  facet_wrap(~ field)
+
+```
+
+```{r pytabs={'class': 'pytabs-9', 'name': 'R'}}
+
+recipients_year_field_sex %>%
+  spread(sex, number) %>%
+  mutate(pct_male = Male / All) %>%
+  filter(broad_field == "Engineering") %>%
+  mutate(field = fct_reorder(field, -pct_male)) %>%
+  ggplot(aes(year, pct_male, color = field)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(x = "Year",
+       y = "% of PhD recipients reporting as male",
+       color = "Major field",
+       title = "Breakdown by sex over time within Engineering major fields")
+
+```
+
+```{r pytabs={'class': 'pytabs-10', 'name': 'R'}}
+
+recipients_year_field_sex %>%
+  spread(sex, number) %>%
+  mutate(pct_male = Male / All) %>%
+  filter(broad_field == "Humanities and arts") %>%
+  mutate(field = fct_reorder(field, -pct_male)) %>%
+  ggplot(aes(year, pct_male, color = field)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(x = "Year",
+       y = "% of PhD recipients reporting as male",
+       color = "Major field",
+       title = "Breakdown by sex over time within Humanities & Arts major fields")
+
+```
+
+```{r pytabs={'class': 'pytabs-11', 'name': 'R'}}
+
+recipients_year_field_sex %>%
+  spread(sex, number) %>%
+  mutate(pct_male = Male / All) %>%
+  filter(broad_field == "Education") %>%
+  mutate(field = fct_reorder(field, -pct_male)) %>%
+  ggplot(aes(year, pct_male, color = field)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(x = "Year",
+       y = "% of PhD recipients reporting as male",
+       color = "Major field",
+       title = "Breakdown by sex over time within Education major fields")
+```
+
+Three levels:
+
+* Broad field (Life sciences)
+* Major field (Biological and biomedical sciences)
+* Subfield (Computational biology)
+
+

@@ -1,7 +1,17 @@
 Translation of Dave Robinson's Tidy Tuesday Analyses
 =======================================================
 
-Checklist for creating new translations:
+## Translations
+
+✅: complete
+❌: missing resources
+🚧: in progress
+
+| date       | name         | links | status |
+| ---------- | ------------ | ----- | ------ |
+| 2019-02-19 | us_phds      | | |
+
+## Contributing new translations
 
 - [ ] new folder, named `{yyyy-mm-dd}-{dgrtwo_filename}`
 - [ ] three notebooks or Rmd files, one for each version (siuba, python, original R)

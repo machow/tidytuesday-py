@@ -4,7 +4,7 @@
 
 | date | name | links |
 | ---- | ---- | ------ |
-| 2019-02-26 | French Trains | ([notebook](https://machow.github.io/tidytuesday-py/french-trains-siuba-tabbed.html)) ([screencast](https://youtu.be/jP_WXc9GV4k))([folder](/dgrtwo-translations/2019-02-26-french-trains)) | 
+| 2019-02-26 | French Trains | [notebook](https://machow.github.io/tidytuesday-py/french-trains-siuba-tabbed.html) | [screencast](https://youtu.be/jP_WXc9GV4k) | [folder](/dgrtwo-translations/2019-02-26-french-trains) | 
 
 
 dependencies

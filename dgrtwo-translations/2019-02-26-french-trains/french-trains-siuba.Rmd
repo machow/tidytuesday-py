@@ -1,0 +1,293 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.3.2
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+# French Train Delays
+
+This document is the result of a screencast where I translated an analysis from R into python.
+
+The R analysis was done as part of an hour long screencast by Dave Robinson. I've reproduced his code in this document (using `%%R` cell magic), and link to the original code below.
+
+| [@machow translation screencast](https://youtu.be/jP_WXc9GV4k) | [@dgrtwo screencast](https://www.youtube.com/watch?v=bmaigtpKyiM) | [original analysis](https://github.com/dgrtwo/data-screencasts/blob/master/french-trains.Rmd) | [Tidy Tuesday](https://github.com/rfordatascience/tidytuesday/tree/master/data/2019/2019-02-26) |
+
+
+
+```{python setup, tags=c(), pytabs={'class': 'pytabs-1', 'name': 'siuba'}}
+import rpy2
+from qgrid import show_grid
+import pandas as pd
+from siuba import _, mutate, arrange, select, filter, count, group_by, summarize, ungroup
+
+from plotnine import *
+```
+
+## Read in data
+
+```{python pytabs={'class': 'pytabs-2', 'name': 'siuba'}}
+full_trains = (
+    pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-02-26/full_trains.csv")
+    >> mutate(
+        pct_late_at_departure = _.num_late_at_departure / _.total_num_trips,
+        arrival_station = _.arrival_station.str.title(),
+        departure_station = _.departure_station.str.title(),
+        date = lambda _: pd.to_datetime(_.year.astype(str) + _.month.apply("-{:02d}".format) + "-01")
+    )
+    >> arrange(_.departure_station, _.arrival_station, _.month)
+    >> mutate(service = _.service.ffill())
+)
+```
+
+### ⚠️: difference between pd.Series.where and np.where
+
+* Series.where(cond, else_value) - keeps values where cond is true, otherwise uses else_value (default NA)
+* np.where(cond) - gives position numbers where cond is True
+* np.where(cond, if_value, else_value) - sets if_value where cond is True, otherwise else_value.
+
+```{python}
+import numpy as np
+
+full_trains.index.where(full_trains.index == 3874)
+
+np.where(full_trains.index == 3874)
+```
+
+```{python}
+#show_grid(full_trains, grid_options = {'forceFitColumns': False})
+```
+
+## Histogram of percentage late for November, 2018
+
+```{python pytabs={'class': 'pytabs-3', 'name': 'siuba'}}
+percent_format = lambda l: ["{:.0f}%".format(v * 100) for v in l]
+
+november_2018 = (
+    full_trains
+    >> filter(_.year == 2018, _.month == 11)
+)
+
+(november_2018
+  >> ggplot(aes("pct_late_at_departure")) 
+   + geom_histogram(binwidth = .05)
+   + scale_x_continuous(labels=lambda l: ["{:.0f}%".format(v * 100) for v in l])
+)
+
+```
+
+## Boxplot of percent late at departure by departure station
+
+
+### ✏️: what is a Categorical series?
+
+These are often used by plotnine and ggplot to reorder legends in plots!
+
+Here is an example.
+
+```{python}
+# what is a categorical
+cat = pd.Series(['a', 'a', 'b', 'b', 'c'], dtype = "category")
+
+print(cat.cat.categories)     # unique values (also called levels)
+print(cat.cat.codes)          # mapping onto categories
+```
+
+```{python pytabs={'class': 'pytabs-4', 'name': 'siuba'}}
+from siuba.dply.forcats import fct_lump
+
+(
+  november_2018
+  >> mutate(departure_station = fct_lump(_.departure_station, 3))
+  >> ggplot(aes("departure_station", "pct_late_at_departure"))
+  + geom_boxplot()
+  + scale_y_continuous(labels = percent_format)
+)
+
+```
+
+## Heat map of late trains based on departing and arriving stations
+
+```{python pytabs={'class': 'pytabs-5', 'name': 'siuba'}}
+from siuba.dply.forcats import fct_reorder
+
+(
+    november_2018
+    >> mutate(
+        arrival_station=fct_reorder(
+            fct_lump(_.arrival_station, n=14), _.pct_late_at_departure
+        )
+    )
+    >> mutate(
+        departure_station=fct_reorder(
+            fct_lump(_.departure_station, n=14), _.pct_late_at_departure
+        )
+    )
+    >> group_by(_.arrival_station, _.departure_station)
+    >> summarize(
+        pct_late_at_departure=_.num_late_at_departure.sum(skipna=True)
+        / _.total_num_trips.sum(skipna=True)
+    )
+    >> ggplot(aes("arrival_station", "departure_station", fill="pct_late_at_departure"))
+    + geom_tile()
+    + scale_fill_gradient2(low="blue", high="red", midpoint=0.25, labels=percent_format)
+    + theme(axis_text_x=element_text(angle=90, hjust=1))
+    + labs(
+        x="Arrival station",
+        y="Departure station",
+        fill="% late at departure",
+        title="Which routes have the most delayed trains in November 2018?",
+        subtitle="Stations with only one arriving/departing route were lumped into 'Other'",
+    )
+)
+```
+
+## Percentage late over time
+
+```{python pytabs={'class': 'pytabs-6', 'name': 'siuba'}}
+(
+    full_trains
+    >> filter(_.departure_station == "Lyon Part Dieu")
+    >> ggplot(aes("date", "pct_late_at_departure", color="arrival_station"))
+    + geom_line()
+    + scale_y_continuous(labels=percent_format)
+    + expand_limits(y=0)
+)
+```
+
+## Summarizing departure station by month
+
+
+```{python}
+num_cols = full_trains.columns[full_trains.columns.str.contains("num")]
+
+summarize_op = {colname: _[colname].sum() for colname in num_cols}
+```
+
+```{python pytabs={'class': 'pytabs-7', 'name': 'siuba'}}
+from siuba.experimental.pd_groups import fast_summarize
+
+# create our own last function
+last = lambda ser: ser.iloc[-1]
+
+by_departure_station_month = (
+    full_trains
+    >> group_by(departure_station=fct_lump(_.departure_station, n=13), date=_.date)
+    >> summarize(**summarize_op)
+    >> ungroup()
+    >> mutate(pct_late_at_departure=_.num_late_at_departure / _.total_num_trips)
+)
+
+(
+    by_departure_station_month
+    >> mutate(
+        departure_station=fct_reorder(
+            _.departure_station, -_.pct_late_at_departure, last
+        )
+    )
+    >> ggplot(aes("date", "pct_late_at_departure", color="departure_station"))
+    + geom_line()
+    + scale_y_continuous(labels=percent_format)
+    + labs(x="Month", y="% late at departure", color="Departure station")
+)
+```
+
+## Similar heat map over time
+
+
+> ✏️: To convert a number to month name, use the `Series.dt.month_name()` method
+
+```{python pytabs={'class': 'pytabs-8', 'name': 'siuba'}}
+from siuba import if_else
+
+summarize_op = {colname: _[colname].sum() for colname in num_cols}
+
+
+by_departure_station_month = (
+    full_trains
+    >> group_by(
+        departure_station=if_else(
+            _.service == "International",
+            _.departure_station + " (International)",
+            _.departure_station,
+        ),
+        service=_.service,
+        year=_.year,
+        month=fct_reorder(_.date.dt.month_name(), _.month),
+    )
+    >> summarize(**summarize_op)
+    >> ungroup()
+    >> mutate(pct_late_at_departure=_.num_late_at_departure / _.total_num_trips)
+)
+
+(
+    by_departure_station_month
+    >> mutate(
+        departure_station=fct_reorder(
+            _.departure_station,
+            (_.service != "International") + _.pct_late_at_departure,
+            np.mean,
+        )
+    )
+    >> ggplot(aes("month", "departure_station", fill="pct_late_at_departure"))
+    + geom_tile()
+    + scale_fill_gradient2(low="blue", high="red", midpoint=0.25, labels=percent_format)
+    + facet_wrap("~ year", nrow=1, scales="free_x")
+    + theme(
+        axis_text_x=element_text(angle=90, hjust=1),
+        axis_ticks=element_blank(),
+        panel_grid=element_blank(),
+    )
+    + labs(fill="% late at departure")
+    + labs(
+        x="Month",
+        y="Departure station",
+        title="Which stations had delays in which months?",
+        subtitle="Ordered by the average delay, with international routes on the bottom",
+    )
+)
+```
+
+## Include code for tabs
+
+```{python}
+def javascript(*st,file=None):
+    from IPython.display import display, HTML
+    if len(st) == 1 and file is None:
+        s = st[0]
+    elif len(st) == 0 and file is not None:
+        s = open(file).read()
+    else:
+        raise ValueError('Pass either a string or file=.')
+    display(HTML("<script type='text/javascript'>" + s + "</script>"))
+    
+javascript(file = "templates/puretabs.js")
+```
+
+```{html}
+<script>
+  window.onload = function() {
+    //pureTabs.init();
+    //pureTabs.init('tabs', 'tabs--active');
+    pureTabs.init('pytabs-1', 'tabs__link--active');
+    pureTabs.init('pytabs-2', 'tabs__link--active');      
+    pureTabs.init('pytabs-2', 'tabs__link--active');      
+    pureTabs.init('pytabs-3', 'tabs__link--active');      
+    pureTabs.init('pytabs-4', 'tabs__link--active');      
+    pureTabs.init('pytabs-5', 'tabs__link--active');      
+    pureTabs.init('pytabs-6', 'tabs__link--active');      
+    pureTabs.init('pytabs-7', 'tabs__link--active');      
+    pureTabs.init('pytabs-8', 'tabs__link--active');      
+    pureTabs.init('pytabs-9', 'tabs__link--active');      
+
+  }
+</script>
+
+```

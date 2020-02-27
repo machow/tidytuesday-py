@@ -3,6 +3,10 @@ The shiny app (app.R) comes from [dgrtwo/data-screencasts](https://github.com/dg
 Useful links
 ------------
 
+Siuba:
+
+* http://github.com/machow/siuba
+
 Voila:
 
 * https://github.com/voila-dashboards/voila

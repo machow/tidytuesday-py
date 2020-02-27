@@ -1,3 +1,5 @@
+# # Dash dashboard demo
+#
 # This notebook was downloaded from...
 #
 # https://github.com/plotly/jupyterlab-dash/blob/master/notebooks/test_app_viewer.ipynb
@@ -57,7 +59,6 @@ def plot_pay_gap_2016(jobs_gender, major_category):
         #        scale_x_continuous(labels = percent_format()) +
         #        scale_y_continuous(labels = percent_format())
     )
-
 
 
 jobs_gender = pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-05/jobs_gender.csv")

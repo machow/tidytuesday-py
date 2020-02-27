@@ -1,3 +1,5 @@
+# # Streamlit dashboard demo
+#
 # Notebook based on this tutorial...
 #
 # https://docs.streamlit.io/tutorial/create_a_data_explorer_app.html
@@ -24,8 +26,8 @@ import os
 # NOTE: needed to add this in order to test streamlit in a REPL
 __file__ = os.getcwd()
 
-# +
-jobs_gender = pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-05/jobs_gender.csv")
+
+# -
 
 def plot_pay_gap_2016(jobs_gender):
     return (
@@ -59,33 +61,23 @@ def plot_pay_gap_2016(jobs_gender):
     )
 
 
-# -
-
 # ## Load Data
 
 # +
-st.title('Uber pickups in NYC')
-
-DATE_COLUMN = 'date/time'
-DATA_URL = ('https://s3-us-west-2.amazonaws.com/'
-            'streamlit-demo-data/uber-raw-data-sep14.csv.gz')
+st.title('Tidy Tuesday: women in the workforce data')
 
 @st.cache
-def load_data(nrows):
-    data = pd.read_csv(DATA_URL, nrows=nrows)
-    lowercase = lambda x: str(x).lower()
-    data.rename(lowercase, axis='columns', inplace=True)
-    data[DATE_COLUMN] = pd.to_datetime(data[DATE_COLUMN])
-    return data
+def load_data():
+    return pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-05/jobs_gender.csv")
 
 data_load_state = st.text('Loading data...')
-data = load_data(10000)
+jobs_gender = load_data()
 data_load_state.text('Loading data... done!')
 # -
 
 if st.checkbox('Show raw data'):
     st.subheader('Raw data')
-    st.write(data)
+    st.write(jobs_gender)
 
 # +
 major_category = st.sidebar.selectbox(

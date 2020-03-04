@@ -5,6 +5,7 @@
 | date | name | links |
 | ---- | ---- | ------ |
 | 2019-02-26 | French Trains | [notebook](https://machow.github.io/tidytuesday-py/french-trains-siuba-tabbed.html) \| [screencast](https://youtu.be/jP_WXc9GV4k) \| [folder](/dgrtwo-translations/2019-02-26-french-trains) | 
+| 2020-03-03 | Hockey Goals | [notebook](https://github.com/machow/tidytuesday-py/blob/master/2020-03-03-hockey.py) \| [dashboard](https://github.com/machow/tidytuesday-py/blob/master/2020-03-03-hockey-streamlit.py) \| [screencast](https://youtu.be/rXuAVLltD3I) |
 
 
 dependencies

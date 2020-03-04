@@ -4,7 +4,9 @@
 
 | date | name | links |
 | ---- | ---- | ------ |
+| 2019-02-19 <a name="toc-us-phds"></a> | US Phds | [notebook](https://mchow.com/tidytuesday-py/us_phds_siuba-tabbed.html) \|  [folder](/dgrtwo-translations/2019-02-19-us_phds) |
 | 2019-02-26 <a name="toc-trains"></a> | French Trains | [notebook](https://machow.github.io/tidytuesday-py/french-trains-siuba-tabbed.html) \| [screencast](https://youtu.be/jP_WXc9GV4k) \| [folder](/dgrtwo-translations/2019-02-26-french-trains) | 
+| 2019-02-26 <a name="toc-women-workforce"></a> | Women in the Workforce | [notebook](https://mchow.com/tidytuesday-py/women-workplace-siuba-tabbed.html) \| [screencast](https://youtu.be/zjRTpYK9TRk) \| [folder](/dgrtwo-translations/app-2019-03-05-women-workplace) | 
 | 2020-03-03 <a name="toc-hockey"></a> | Hockey Goals | [notebook](https://github.com/machow/tidytuesday-py/blob/master/2020-03-03-hockey.py) \| [dashboard](https://github.com/machow/tidytuesday-py/blob/master/2020-03-03-hockey-streamlit.py) \| [screencast](https://youtu.be/rXuAVLltD3I) |
 
 

@@ -22,7 +22,7 @@ I made a quick library called nbtabs! https://github.com/machow/nbtabs. It haven
 
 ### Why screencast?
 
-Screencasting is very similar to a method used in expertise research called the think-aloud method. This method is very helpful for understanding how novices and experts approach different problems. With written tutorials, learners don't get to see all the effort people put into figuring out the final code. This is very different from the real world, where data scientists are constantly dealing with surprising and unexpected aspects of their data!
+Screencasting is very similar to a method used in expertise research called the [think-aloud method](https://en.wikipedia.org/wiki/Think_aloud_protocol). This method is very helpful for understanding how novices and experts approach different problems. With written tutorials, learners don't get to see all the effort people put into figuring out the final code. This is very different from the real world, where data scientists are constantly dealing with surprising and unexpected aspects of their data!
 
 dependencies
 ------------

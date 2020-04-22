@@ -1,0 +1,308 @@
+---
+title: "Board Games"
+output: html_document
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.4.2
+  kernelspec:
+    display_name: venv-tidytuesday-py
+    language: python
+    name: venv-tidytuesday-py
+---
+
+```{python}
+import rpy2
+
+%load_ext rpy2.ipython
+
+from qgrid import show_grid
+```
+
+```{python, pytabs={'class': 'pytabs-1', 'name': 'python'}}
+import pandas as pd
+import numpy as np
+from siuba import _
+
+board_games_raw = pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-12/board_games.csv")
+
+holdout_set = board_games_raw[_.game_id % 5 == 0]
+
+board_games = board_games_raw[_.game_id % 5 != 0]
+```
+
+### EDA
+
+```{python, pytabs={'class': 'pytabs-2', 'name': 'python'}}
+from plotnine import *
+from siuba import count, _
+
+(
+    board_games
+    .groupby('publisher')
+    .size()
+    .reset_index()
+    .rename(columns = {0: "n"})
+    .sort_values('n', ascending = False)
+)
+
+# in siuba...
+# count(board_games, _.publisher, sort = True)
+
+(
+    board_games
+    >> count(_.year_published, sort = True)
+    >> ggplot(aes("year_published", "n"))
+     + geom_line()
+)
+```
+
+```{python, pytabs={'class': 'pytabs-3', 'name': 'python'}}
+  
+(
+  board_games >>
+  ggplot(aes("average_rating")) +
+  geom_histogram()
+)
+```
+
+```{python}
+2 ** np.arange(-2., 4+1)
+```
+
+```{python, pytabs={'class': 'pytabs-4', 'name': 'python'}}
+(
+  board_games
+  .loc[(_.max_playtime > 5) & (_.max_playtime < 1000) ] >>
+  #filter(_.max_playtime > 5, _.max_playtime < 1000) >>
+  ggplot(aes("max_playtime / 60")) +
+  geom_histogram(binwidth = .25) +
+  scale_x_log10(breaks = 2 ** np.arange(-2., 4+1))
+)
+
+```
+
+```{python, pytabs={'class': 'pytabs-5', 'name': 'python'}}
+(board_games >> 
+  count(_.year_published) >>
+  ggplot(aes("year_published", "n")) +
+  geom_line()
+)
+```
+
+Categorical variables:
+
+Note that the equivalent of R's `separate_rows` does not exist in pandas, so
+I spend the next few cells developing a version of it.
+
+```{python, pytabs={'class': 'pytabs-6', 'name': 'python'}}
+unsep_variables = (
+  board_games
+  .loc[:, ["game_id", "name", "family", "category", "artist", "designer", "mechanic"]]
+  .melt(id_vars = ["game_id", "name"], var_name = "type")
+  .loc[_.value.notna()]
+#   separate_rows(value, sep = ",") %>%
+#   arrange(game_id)
+)
+
+
+```
+
+```{python}
+# one way to get categorical values
+split_values = unsep_variables.set_index(["game_id", "type"]).value.str.split(',')
+
+out = []
+for (game_id, _type), val_list in split_values.iteritems():
+    out.extend([(game_id, _type, val) for val in val_list])
+    
+
+categorical_values = (
+  pd.DataFrame(out, columns = ['game_id', "type", 'value'])
+)
+
+#categorical_variables = pd.merge()
+```
+
+```{python}
+categorical_values
+```
+
+```{python}
+# a much shorter way
+from siuba import unnest, rename
+categorical_values = (
+  unsep_variables
+  .assign(result = _.value.str.split(',')) 
+  .drop(columns = ["value"])
+  >> unnest("result")
+  >> rename(value = "result")
+)
+```
+
+```{python, pytabs={'class': 'pytabs-7', 'name': 'python'}}
+from siuba import mutate
+categorical_counts = (
+  categorical_values >>
+  count(_.type, _.value, sort = True)
+)
+
+# library(drlib)
+from siuba import _, group_by, ungroup
+(categorical_counts 
+    .groupby("type")
+    .apply(
+        lambda D: D.sort_values("n", ascending = False).head(10)
+    ) >>
+  mutate(_type = _.type) >>
+  ggplot(aes("value", "n", fill = "_type")) +
+  geom_col(show_legend = False) +
+  coord_flip() +
+  facet_wrap("~ _type", scales = "free_y") +
+   theme(axis_text_x = element_text(rotation = 45, hjust = 1))
+
+)
+#   coord_flip() +
+#   scale_x_reordered() +
+#   labs(title = "Most common categories")
+```
+
+```{python}
+# categorical_counts.groupby("type").apply(
+#     lambda D: D.sort_values("n", ascending = False).head(10)
+# )
+```
+
+### Predict average rating
+
+
+**NOTE: did not get to this section; may loop back around to it.**
+
+```{python active="", eval=FALSE}
+board_games %>%
+  group_by(decade = 10 * (year_published %/% 10)) %>%
+  summarize(average_rating = mean(average_rating)) %>%
+  ggplot(aes(decade, average_rating)) +
+  geom_line()
+```
+
+
+```{python active="", eval=FALSE}
+library(broom)
+
+lm(average_rating ~
+     log2(max_players + 1) +
+     log2(max_playtime + 1) +
+     year_published, board_games) %>%
+  tidy()
+```
+
+```{python active="", eval=FALSE}
+by_categorical <- board_games %>%
+  inner_join(categorical_variables, by = c("game_id", "name")) %>%
+  select(type, value, average_rating) %>%
+  group_by(type, value) %>%
+  summarize(games = n(),
+            average_rating = mean(average_rating)) %>%
+  arrange(desc(games))
+
+board_games %>%
+  inner_join(categorical_variables, by = c("game_id", "name")) %>%
+  filter(type == "category") %>%
+  mutate(value = fct_lump(value, 15),
+         value = fct_reorder(value, average_rating)) %>%
+  ggplot(aes(value, average_rating)) +
+  geom_boxplot() +
+  coord_flip()
+
+board_games %>%
+  inner_join(categorical_variables, by = c("game_id", "name")) %>%
+  filter(type == "family") %>%
+  mutate(value = fct_lump(value, 15),
+         value = fct_reorder(value, average_rating)) %>%
+  ggplot(aes(value, average_rating)) +
+  geom_boxplot() +
+  coord_flip()
+```
+
+Conclusion: categorical variables can be correlated with higher/lower rated games.
+
+```{python active="", eval=FALSE}
+non_categorical_features <- board_games %>%
+  transmute(game_id,
+            name,
+            year = year_published - 1950,
+            log2_max_players = log2(max_players + 1),
+            log2_max_playtime = log2(max_playtime + 1)) %>%
+  gather(feature, value, -game_id, -name)
+
+features <- categorical_variables %>%
+  unite(feature, type, value, sep = ": ") %>%
+  add_count(feature) %>%
+  filter(n >= 20) %>%
+  mutate(value = 1) %>%
+  bind_rows(non_categorical_features)
+
+library(glmnet)
+library(tidytext)
+library(Matrix)
+
+# Predictor
+feature_matrix <- features %>%
+  cast_sparse(game_id, feature, value)
+
+# What I'm predicting
+ratings <- board_games$average_rating[match(rownames(feature_matrix), board_games$game_id)]
+
+cv_lasso <- cv.glmnet(feature_matrix, ratings)
+plot(cv_lasso)
+
+cv_lasso$glmnet.fit %>%
+  tidy() %>%
+  filter(lambda == cv_lasso$lambda.1se) %>%
+  arrange(desc(estimate)) %>%
+  filter(term != "(Intercept)") %>%
+  top_n(25, abs(estimate)) %>%
+  mutate(term = fct_reorder(term, estimate)) %>%
+  ggplot(aes(term, estimate)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Largest coefficients in our predictive model",
+       subtitle = "Based on a LASSO regression",
+       x = "",
+       y = "Coefficient")
+```
+
+### Include code for tabs
+
+```{python}
+def javascript(*st,file=None):
+    from IPython.display import display, HTML
+    if len(st) == 1 and file is None:
+        s = st[0]
+    elif len(st) == 0 and file is not None:
+        s = open(file).read()
+    else:
+        raise ValueError('Pass either a string or file=.')
+    display(HTML("<script type='text/javascript'>" + s + "</script>"))
+    
+javascript(file = "../templates/puretabs.js")
+```
+
+```{python}
+%%html
+<script>
+    window.onload = function() {
+    //pureTabs.init();
+    //pureTabs.init('tabs', 'tabs--active');
+    for (let ii of Array(10).keys()) {
+        pureTabs.init(`pytabs-${ii+1}`, 'tabs__link--active');
+    }
+    }
+</script>
+```
+
+

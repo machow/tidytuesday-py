@@ -34,7 +34,7 @@ templates:
 
 2019-03-12-board-games/tabbed-analysis.html: 2019-03-12-board-games
 	cd "$<" && nbtabs convert -e --out tabbed-analysis.ipynb board-games-siuba.Rmd board-games.Rmd
-	jupyter nbconvert --to html --template templates/nbtabs-full.tpl "$</tabbed-analysis.ipynb"
+	jupyter nbconvert --to html --template templates/nbtabs-full.tpl "$</tabbed.ipynb"
 	
 
 

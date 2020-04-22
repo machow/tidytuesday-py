@@ -85,7 +85,7 @@ nbconvert==5.6.1
 nbdime==1.1.0
 nbformat==5.0.4
 -e git+git@github.com:machow/nbtabs.git@61199b91809a8f502ada774be67fc51e337d7d98#egg=nbtabs
-notebook==6.0.3
+notebook==5.7.8
 numpy==1.18.1
 packaging==19.2
 palettable==3.3.0

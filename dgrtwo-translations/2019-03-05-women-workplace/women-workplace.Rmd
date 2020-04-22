@@ -1,0 +1,122 @@
+---
+title: "Women in the Workplace"
+output: html_document
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.3.2
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python setup, include=FALSE, pytabs={'class': 'pytabs-1', 'name': 'R'}}
+import rpy2
+from qgrid import show_grid
+# %load_ext rpy2.ipython
+
+```
+
+```{r pytabs={'class': 'pytabs-2', 'name': 'R'}}
+library(tidyverse)
+library(scales)
+theme_set(theme_light())
+
+jobs_gender <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-05/jobs_gender.csv")
+earnings_female <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-05/earnings_female.csv") 
+employed_gender <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-05/employed_gender.csv") 
+```
+
+```{r pytabs={'class': 'pytabs-3', 'name': 'R'}}
+library(stringr)
+summarize_jobs_gender <- . %>%
+    summarize(total_earnings = sum(total_earnings * total_workers) / sum(total_workers),
+              total_earnings_male = sum(total_earnings_male * workers_male, na.rm = TRUE) /
+                sum(workers_male[!is.na(total_earnings_male)]),
+              total_earnings_female = sum(total_earnings_female * workers_female, na.rm = TRUE) /
+                sum(workers_female[!is.na(total_earnings_female)]),
+              total_workers = sum(total_workers),
+              workers_male = sum(workers_male),
+              workers_female = sum(workers_female)) %>%
+    mutate(wage_percent_of_male = total_earnings_female / total_earnings_male)
+
+by_year_major_category <- jobs_gender %>%
+  filter(complete.cases(.)) %>%
+  group_by(year, major_category) %>%
+  summarize_jobs_gender()
+
+by_year_major_category %>%
+  mutate(major_category = fct_reorder(major_category, -total_earnings)) %>%
+  ggplot(aes(year, total_earnings, color = major_category)) +
+  geom_line() +
+  expand_limits(y = 0)
+```
+
+```{r pytabs={'class': 'pytabs-4', 'name': 'R'}}
+by_year_major_category %>%
+  mutate(major_category = fct_reorder(major_category, -wage_percent_of_male)) %>%
+  ggplot(aes(year, wage_percent_of_male, color = major_category)) +
+  geom_line()
+```
+
+```{r pytabs={'class': 'pytabs-5', 'name': 'R'}}
+by_minor_category_2016 <- jobs_gender %>%
+  filter(year == 2016) %>%
+  group_by(major_category, minor_category) %>%
+  summarize_jobs_gender() %>%
+  ungroup()
+
+by_minor_category_2016 %>%
+  mutate(minor_category = fct_reorder(minor_category, wage_percent_of_male)) %>%
+  ggplot(aes(minor_category, wage_percent_of_male, fill = major_category)) +
+  geom_col() +
+  coord_flip()
+```
+
+```{r pytabs={'class': 'pytabs-6', 'name': 'R'}}
+#library(plotly)
+
+p <- jobs_gender %>%
+  filter(year == 2016) %>%
+  filter(major_category == "Healthcare Practitioners and Technical") %>%
+  arrange(desc(wage_percent_of_male)) %>%
+  ggplot(aes(workers_female / total_workers,
+             total_earnings,
+             size = total_workers,
+             label = occupation)) +
+  geom_point() +
+  scale_size_continuous(range = c(1, 10)) +
+  labs(size = "Total # of workers",
+       x = "% of workforce reported as female",
+       y = "Median salary in the occupation") +
+  scale_x_continuous(labels = percent_format()) +
+  scale_y_continuous(labels = dollar_format()) +
+  expand_limits(y = 0)
+
+p
+```
+
+```{r pytabs={'class': 'pytabs-7', 'name': 'R'}}
+jobs_gender %>%
+  filter(year == 2016,
+         total_workers >= 20000) %>%
+  filter(major_category == "Computer, Engineering, and Science") %>%
+  arrange(desc(wage_percent_of_male)) %>%
+  ggplot(aes(workers_female / total_workers,
+             total_earnings_female / total_earnings_male,
+             color = minor_category,
+             size = total_workers,
+             label = occupation)) +
+  geom_point() +
+  scale_size_continuous(range = c(1, 10)) +
+  labs(size = "Total # of workers",
+       x = "% of workforce reported as female",
+       y = "% of median female salary / median male") +
+  scale_x_continuous(labels = percent_format()) +
+  scale_y_continuous(labels = percent_format())
+
+```

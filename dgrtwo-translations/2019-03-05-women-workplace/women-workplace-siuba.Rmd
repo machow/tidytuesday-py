@@ -1,0 +1,183 @@
+---
+title: "Women in the Workplace"
+output: html_document
+---
+
+```{python setup, include=FALSE, pytabs={'class': 'pytabs-1', 'name': 'siuba'}}
+import rpy2
+from qgrid import show_grid
+import pandas as pd
+
+from siuba import _, group_by, filter, summarize, mutate, ungroup, arrange
+from siuba.dply.forcats import fct_reorder
+from plotnine import *
+
+```
+
+```{python pytabs={'class': 'pytabs-2', 'name': 'siuba'}}
+jobs_gender = pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-05/jobs_gender.csv")
+earnings_female = pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-05/earnings_female.csv") 
+employed_gender = pd.read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-03-05/employed_gender.csv") 
+```
+
+```{python}
+#show_grid(jobs_gender, grid_options = {'forceFitColumns': False})
+```
+
+```{python pytabs={'class': 'pytabs-3', 'name': 'siuba'}}
+import numpy as np
+
+summarize_jobs_gender = (
+    summarize(
+        total_earnings=(_.total_earnings * _.total_workers).sum()
+        / _.total_workers.sum(),
+        total_earnings_male=(_.total_earnings_male * _.workers_male).sum()
+        / _.workers_male[_.total_earnings_male.notna()].sum(),
+        total_earnings_female=(_.total_earnings_female * _.workers_female).sum()
+        / _.workers_female[_.total_earnings_female.notna()].sum(),
+        total_workers=_.total_workers.sum(),
+        workers_male=_.workers_male.sum(),
+        workers_female=_.workers_female.sum(),
+    )
+    >> mutate(wage_percent_of_male=_.total_earnings_female / _.total_earnings_male)
+)
+
+
+by_year_major_category = (
+    jobs_gender
+    >> filter(~_.isna().any(axis=1))
+    >> group_by(_.year, _.major_category)
+    >> summarize_jobs_gender
+)
+
+(
+    by_year_major_category
+    >> mutate(major_category=fct_reorder(_.major_category, -_.total_earnings))
+    >> ggplot(aes("year", "total_earnings", color="major_category"))
+    + geom_line()
+    + expand_limits(y=0)
+)
+```
+
+```{python pytabs={'class': 'pytabs-4', 'name': 'siuba'}}
+(
+    by_year_major_category
+    >> mutate(major_category=fct_reorder(_.major_category, -_.wage_percent_of_male))
+    >> ggplot(aes("year", "wage_percent_of_male", color="major_category"))
+     + geom_line()
+#      + expand_limits(y = [0, 1])
+)
+```
+
+```{python pytabs={'class': 'pytabs-5', 'name': 'siuba'}}
+by_minor_category_2016 = (
+    jobs_gender
+    >> filter(_.year == 2016)
+    >> group_by(_.major_category, _.minor_category)
+    >> summarize_jobs_gender
+    >> ungroup()
+)
+
+(
+    by_minor_category_2016
+    >> mutate(minor_category=fct_reorder(_.minor_category, _.wage_percent_of_male))
+    >> ggplot(aes("minor_category", "wage_percent_of_male", fill="major_category"))
+    + geom_col()
+    + coord_flip()
+)
+```
+
+
+```{python pytabs={'class': 'pytabs-6', 'name': 'siuba'}}
+percent_format = lambda l: ["{:.0f}%".format(v * 100) for v in l]
+dollar_format = lambda l: ["${:,.0f}".format(v) for v in l]
+
+
+(
+    jobs_gender
+    >> filter(_.year == 2016)
+    >> filter(_.major_category == "Healthcare Practitioners and Technical")
+    >> arrange(-_.wage_percent_of_male)
+    >> ggplot(
+        aes(
+            "workers_female / total_workers",
+            "total_earnings",
+            size="total_workers",
+            label="occupation",
+        )
+    )
+    + geom_point()
+    + scale_size_continuous(range=[1, 10])
+    + labs(
+        size="Total # of workers",
+        x="% of workforce reported as female",
+        y="Median salary in the occupation",
+    )
+    + scale_x_continuous(labels=percent_format)
+    + scale_y_continuous(labels=dollar_format)
+    + expand_limits(y=0)
+)
+```
+
+```{python pytabs={'class': 'pytabs-7', 'name': 'siuba'}}
+(
+    jobs_gender
+    >> filter(_.year == 2016, _.total_workers >= 20000)
+    >> filter(_.major_category == "Computer, Engineering, and Science")
+    >> arrange(-_.wage_percent_of_male)
+    >> ggplot(
+        aes(
+            "workers_female / total_workers",
+            "total_earnings_female / total_earnings_male",
+            color="minor_category",
+            size="total_workers",
+            label="occupation",
+        )
+    )
+    + geom_point()
+    + scale_size_continuous(range=[1, 10])
+    + labs(
+        size="Total # of workers",
+        x="% of workforce reported as female",
+        y="% of median female salary / median male",
+    )
+    + scale_x_continuous(labels=percent_format)
+    + scale_y_continuous(labels=percent_format)
+)
+```
+
+## Include code for tabs
+
+```{python}
+def javascript(*st,file=None):
+    from IPython.display import display, HTML
+    if len(st) == 1 and file is None:
+        s = st[0]
+    elif len(st) == 0 and file is not None:
+        s = open(file).read()
+    else:
+        raise ValueError('Pass either a string or file=.')
+    display(HTML("<script type='text/javascript'>" + s + "</script>"))
+    
+javascript(file = "templates/puretabs.js")
+```
+
+```{html}
+<script>
+  window.onload = function() {
+    //pureTabs.init();
+    //pureTabs.init('tabs', 'tabs--active');
+    pureTabs.init('pytabs-1', 'tabs__link--active');
+    pureTabs.init('pytabs-2', 'tabs__link--active');      
+    pureTabs.init('pytabs-2', 'tabs__link--active');      
+    pureTabs.init('pytabs-3', 'tabs__link--active');      
+    pureTabs.init('pytabs-4', 'tabs__link--active');      
+    pureTabs.init('pytabs-5', 'tabs__link--active');      
+    pureTabs.init('pytabs-6', 'tabs__link--active');      
+    pureTabs.init('pytabs-7', 'tabs__link--active');      
+
+  }
+</script>
+
+```
+

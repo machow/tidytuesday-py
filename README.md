@@ -14,7 +14,7 @@
 | date | name | links |
 | ---- | ---- | ------ |
 | 2020-03-03 <a name="toc-hockey"></a> | Hockey Goals | [notebook](https://github.com/machow/tidytuesday-py/blob/master/2020-03-03-hockey.py) \| [dashboard](https://github.com/machow/tidytuesday-py/blob/master/2020-03-03-hockey-streamlit.py) \| [screencast](https://youtu.be/rXuAVLltD3I) |
-| 2020-04-21 <a name="toc-gdpr"></a> | GDPR fines | [notebook](https://github.com/machow/tidytuesday-py/blob/master/2020-04-21-gdpr.ipynb) |
+| 2020-04-21 <a name="toc-gdpr"></a> | GDPR fines | [notebook](https://github.com/machow/tidytuesday-py/blob/master/2020-04-21-gdpr.ipynb) \| [screencast](https://youtu.be/z6xNKZZMWgU)|
 
 ## Frequently Asked Questions
 

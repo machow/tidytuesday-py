@@ -57,7 +57,7 @@ pyparsing==2.3.1
 pytest==4.3.0
 python-dateutil==2.7.5
 pytz==2018.9
-PyYAML==3.13
+PyYAML==5.1
 pyzmq==17.1.2
 qgrid==1.1.1
 qtconsole==4.4.3
